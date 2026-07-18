@@ -36,6 +36,8 @@ A per-market state machine driven by live BBO + trade data:
 
 **Toxicity gauge (the kill trigger).** A composite of top-of-book imbalance, mid-price drift, and trade-volume burst — a lightweight, latency-friendly cousin of VPIN/OFI. When it spikes (a real BTC move, a news event), the engine steps out of the way *before* the informed fill compounds.
 
+**Order-flow toxicity gauge (`toxicity.py`), the data-validated successor.** On order-level (MBO) feeds, a head-to-head on 22 ES + 23 NQ sessions replaced the hand-weighted score with an empirically-fit one: **order-arrival intensity + mid-range + the fraction of orders that flicker and cancel in under 100ms.** It *keeps* the one strong term the original had (mid drift), *drops* the near-useless imbalance term (univariate AUC 0.63–0.68 vs 0.84–0.87 for the others), and *adds* the two strongest signals. Time-series-CV AUC for predicting next-bar volatility expansion: **0.866 / 0.868 (ES / NQ) vs 0.857 / 0.856** for the original — a consistent +0.009 to +0.012. Ships with a self-test; recalibrate weights on the target venue's own book.
+
 **Adverse-selection–honest fill model.** Resting quotes fill *only when price trades through them* — your bid fills when the next bestBid drops below it, leaving you long into a falling market (the toxic fill). This deliberately captures the cost you're exposed to instead of assuming benign mid fills.
 
 **Full economic decomposition.** Every session tracks, separately: liquidity-incentive accrual, maker rebate per fill (`rebate = Θ·size·p·(1−p)`, Θ = −0.0125), realized inventory P&L + **mark-to-market on held inventory**, and taker fees paid to flatten on kills.
@@ -61,6 +63,7 @@ event-contract-market-maker/
 ├── requirements.txt
 └── src/
     ├── quoter.py         # the engine: state machine, toxicity kill-switch, honest fills, economics
+    ├── toxicity.py       # order-flow toxicity gauge (arrival + mid-range + fleeting-order fraction), ES/NQ-validated
     ├── size_scaling.py   # net-vs-capital curve (capacity + market-impact model)
     └── reconcile.py      # cashflow reconciliation — the sign-bug catcher (runnable, self-testing)
 ```
@@ -70,6 +73,7 @@ event-contract-market-maker/
 ```bash
 pip install -r requirements.txt
 python src/quoter.py --seconds 780     # one paper session against live books (keyless)
+python src/toxicity.py                 # order-flow toxicity gauge self-test
 python src/reconcile.py                # cashflow reconciliation self-test
 python src/size_scaling.py             # net/$ scaling curve from accumulated fills
 ```
